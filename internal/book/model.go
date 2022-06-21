@@ -6,3 +6,12 @@ type Book struct {
 	Size int64  `json:"size"`
 	Path string `json:"path"`
 }
+
+func NewBook(name string, size int64, path string) *Book {
+	return &Book{
+		ID:   "",
+		Name: name,
+		Size: size,
+		Path: path,
+	}
+}

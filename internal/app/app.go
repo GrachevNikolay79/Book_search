@@ -3,6 +3,7 @@ package app
 import (
 	"book_search/internal/book"
 	"book_search/internal/config"
+	"book_search/internal/utils"
 	"container/list"
 	"fmt"
 	"log"
@@ -51,9 +52,10 @@ func (a *App) pushToDB() {
 	pushdbActiv = true
 	for queue.Len() > 0 {
 		b := queue.Front()
-		extension := filepath.Ext(b.Value.(book.Book).Name)
+		book := b.Value.(book.Book)
+		extension := filepath.Ext(book.Name)
 		if a.cfg.Ext[extension] {
-			fmt.Println(extension)
+			fmt.Println(extension, book.ID)
 		}
 
 		lock.Lock()
@@ -72,12 +74,21 @@ func (a *App) visitAllSubDirs(path string) {
 			}
 			if !info.IsDir() {
 				p := strings.Replace(lpath, info.Name(), "", -1)
+				p = strings.TrimRight(p, "/")
+
+				sha256, err := utils.CalcFileSHA256(lpath)
+				if err != nil {
+					sha256 = ""
+				}
+
 				lock.Lock()
 				queue.PushBack(book.Book{
+					ID:   sha256,
 					Name: info.Name(),
 					Size: info.Size(),
-					Path: strings.TrimRight(p, "/")})
+					Path: p})
 				lock.Unlock()
+
 				if queue.Len() > 3 && !pushdbActiv {
 					pushdbActiv = true
 					go a.pushToDB()
