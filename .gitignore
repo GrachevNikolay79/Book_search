@@ -3,3 +3,4 @@
 ./logs
 ./cmd/app/logs
 go.sum
+cmd/app/config.yaml
