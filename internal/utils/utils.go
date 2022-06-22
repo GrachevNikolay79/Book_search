@@ -9,22 +9,23 @@ import (
 	"time"
 )
 
-func CalcFileSHA256(fname string) (res string, err error) {
+func CalcFileSHA256(fname string) (res string, size int64, err error) {
 	f, err := os.Open(fname)
 	if err != nil {
 		log.Println(err)
-		return "", err
+		return "", 0, err
 	}
 	defer f.Close()
 
 	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
+	size, err = io.Copy(h, f)
+	if err != nil {
 		log.Println(err)
-		return "", err
+		return "", size, err
 	}
 
 	str := fmt.Sprintf("%x", h.Sum(nil))
-	return str, nil
+	return str, size, nil
 }
 
 func DoWithTries(fn func() error, attemtps int, delay time.Duration) (err error) {

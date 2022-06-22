@@ -22,3 +22,4 @@ cmd/app/config.yaml
 vendor/
 test.sql
 library.session.sql
+cmd/app/__debug_bin

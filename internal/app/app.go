@@ -8,8 +8,8 @@ import (
 	"container/list"
 	"context"
 	"fmt"
+	"io/fs"
 	"log"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -49,7 +49,6 @@ func (a *App) Run() {
 	fmt.Println("===========")
 	for _, v := range a.cfg.Paths {
 		a.visitAllSubDirs(v)
-		break
 	}
 
 	if queue.Len() > 0 && !pushdbActiv {
@@ -64,52 +63,61 @@ func (a *App) Run() {
 
 // Поместим данные из очереди в базу
 func (a *App) pushToDB() {
+	var b book.Book
 	pushdbActiv = true
 	for queue.Len() > 0 {
-		b := queue.Front()
-		book := b.Value.(book.Book)
-		extension := filepath.Ext(book.Name)
-		if a.cfg.Ext[extension] {
-			a.insertBook(&book)
-		}
+		bq := queue.Front()
+		b = bq.Value.(book.Book)
+		//all entries have already been checked for extension
+		a.insertBook(&b)
 
 		lock.Lock()
-		queue.Remove(b)
+		queue.Remove(bq)
 		lock.Unlock()
 	}
+	log.Println(b.Path)
+	//log.Println(b.Name)
 	pushdbActiv = false
 }
 
 // обойдем все директории и сформируем очередь из файлов с книжками
+// go around all the directories and form a queue of entries from files with books
 func (a *App) visitAllSubDirs(path string) {
-	err := filepath.Walk(path,
-		func(lpath string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if !info.IsDir() {
-				p := strings.Replace(lpath, info.Name(), "", -1)
-				p = strings.TrimRight(p, "/")
-				sha256, err := utils.CalcFileSHA256(lpath)
-				if err != nil {
-					sha256 = ""
+	err := filepath.WalkDir(path,
+		func(lpath string, lfile fs.DirEntry, err error) error {
+			if !lfile.Type().IsDir() {
+				llpath := strings.TrimRight(strings.Replace(lpath, lfile.Name(), "", -1), "/")
+				extension := filepath.Ext(lfile.Name())
+
+				//check ext and add to queue
+				if a.cfg.Ext[extension] {
+					sha256, size, err := utils.CalcFileSHA256(lpath)
+					if err != nil {
+						log.Panicln("Calc sha256:", err)
+						return nil
+					}
+					if err != nil {
+						log.Println(err)
+					}
+					lock.Lock()
+					queue.PushBack(book.Book{
+						ID:   sha256,
+						Name: lfile.Name(),
+						Size: size,
+						Path: llpath,
+						Ext:  extension})
+					lock.Unlock()
 				}
 
-				lock.Lock()
-				queue.PushBack(book.Book{
-					ID:   sha256,
-					Name: info.Name(),
-					Size: info.Size(),
-					Path: p})
-				lock.Unlock()
-
-				if queue.Len() > 3 && !pushdbActiv {
+				if queue.Len() > 5 && !pushdbActiv {
 					pushdbActiv = true
 					go a.pushToDB()
 				}
+
 			}
 			return nil
 		})
+
 	if err != nil {
 		log.Println(err)
 	}
@@ -127,7 +135,8 @@ func (a *App) InitDatabase() {
 		(id varchar(64) primary key, 
 		name varchar(256), 
 		length bigint, 
-		path varchar(1024))`
+		path varchar(1024),
+		ext varchar(8))`
 
 	row := conn.QueryRow(context.Background(), sql)
 	_ = row
@@ -142,14 +151,15 @@ func (a *App) insertBook(b *book.Book) {
 
 	row := conn.QueryRow(context.Background(),
 		`INSERT INTO TEMP_BOOK 
-			(id,name, length, path) 
-			VALUES ($1, $2, $3, $4) 
+			(id,name, length, path, ext) 
+			VALUES ($1, $2, $3, $4, $5) 
 			ON CONFLICT(id) do UPDATE
 			SET name   = excluded.name,
 				length = excluded.length,
-				path   = excluded.path
+				path   = excluded.path,
+				ext    = excluded.ext
 		RETURNING id;`,
-		b.ID, b.Name, b.Size, b.Path)
+		b.ID, b.Name, b.Size, b.Path, b.Ext)
 
 	var id string
 	err = row.Scan(&id)
