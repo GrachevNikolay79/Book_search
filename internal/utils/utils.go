@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"time"
 )
 
 func CalcFileSHA256(fname string) (res string, err error) {
@@ -24,4 +25,26 @@ func CalcFileSHA256(fname string) (res string, err error) {
 
 	str := fmt.Sprintf("%x", h.Sum(nil))
 	return str, nil
+}
+
+func DoWithTries(fn func() error, attemtps int, delay time.Duration) (err error) {
+	for attemtps > 0 {
+		if err = fn(); err != nil {
+			time.Sleep(delay)
+			attemtps--
+
+			continue
+		}
+
+		return nil
+	}
+
+	return
+}
+
+func MaxI(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

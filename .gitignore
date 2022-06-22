@@ -20,3 +20,4 @@ cmd/app/config.yaml
 
 # Dependency directories (remove the comment below to include it)
 vendor/
+test.sql

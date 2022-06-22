@@ -15,6 +15,7 @@ func main() {
 		return
 	}
 	app := app.NewApp(cfg)
+	app.InitDatabase()
 	app.Run()
 	app.ShutDown()
 }
