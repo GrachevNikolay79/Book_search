@@ -7,8 +7,7 @@ Information about the found books is stored in the database.
 
 <br>
 TODO:<br>
-1. Add gorm and connect database (PostgreSQL)<br>
-2. Save book information to database<br>
+1. beutify code
 
 <br>
 
