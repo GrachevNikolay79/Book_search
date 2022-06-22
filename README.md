@@ -7,7 +7,7 @@ Information about the found books is stored in the database.
 
 <br>
 TODO:<br>
-1. beutify code
+1. beautify code
 
 <br>
 
