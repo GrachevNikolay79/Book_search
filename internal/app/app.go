@@ -101,11 +101,12 @@ func (a *App) visitAllSubDirs(path string) {
 					}
 					lock.Lock()
 					queue.PushBack(book.Book{
-						ID:   sha256,
-						Name: lfile.Name(),
-						Size: size,
-						Path: llpath,
-						Ext:  extension})
+						ID:     "",
+						SHA256: sha256,
+						Name:   lfile.Name(),
+						Size:   size,
+						Path:   llpath,
+						Ext:    extension})
 					lock.Unlock()
 				}
 
@@ -132,14 +133,31 @@ func (a *App) InitDatabase() {
 
 	sql := `
 		CREATE TABLE IF NOT EXISTS public.TEMP_BOOK 
-		(id varchar(64) primary key, 
+		(id SERIAL, 
 		name varchar(256), 
+		sha256 varchar(64),
 		length bigint, 
 		path varchar(1024),
-		ext varchar(8))`
+		ext varchar(8));
+		`
+	conn.QueryRow(context.Background(), sql)
 
-	row := conn.QueryRow(context.Background(), sql)
-	_ = row
+	sql = `CREATE INDEX IF NOT EXISTS ON public.TEMP_BOOK (sha256);`
+	conn.QueryRow(context.Background(), sql)
+}
+
+func (a *App) lookupBook(b *book.Book, conn *pgxpool.Conn) bool {
+	rows, err := conn.Query(context.Background(),
+		`SELECT tb.sha256 as ID 
+		FROM TEMP_BOOK as tb 
+		WHERE tb.sha256 = $1 and tb.path = $2 and name = $3;`,
+		b.SHA256, b.Path, b.Name)
+	if err != nil {
+		log.Printf("Can't search book: %v\n", err)
+		return false
+	}
+	defer rows.Close()
+	return rows.Next()
 }
 
 func (a *App) insertBook(b *book.Book) {
@@ -149,22 +167,21 @@ func (a *App) insertBook(b *book.Book) {
 	}
 	defer conn.Release()
 
-	row := conn.QueryRow(context.Background(),
-		`INSERT INTO TEMP_BOOK 
-			(id,name, length, path, ext) 
-			VALUES ($1, $2, $3, $4, $5) 
-			ON CONFLICT(id) do UPDATE
-			SET name   = excluded.name,
-				length = excluded.length,
-				path   = excluded.path,
-				ext    = excluded.ext
-		RETURNING id;`,
-		b.ID, b.Name, b.Size, b.Path, b.Ext)
+	if !a.lookupBook(b, conn) {
+		row := conn.QueryRow(context.Background(),
+			`INSERT INTO TEMP_BOOK 
+				(sha256,name, length, path, ext) 
+				VALUES ($1, $2, $3, $4, $5) 				
+			RETURNING sha256;`,
+			b.SHA256, b.Name, b.Size, b.Path, b.Ext)
 
-	var id string
-	err = row.Scan(&id)
-	if err != nil {
-		log.Printf("Unable to INSERT: %v\n", err)
-		log.Println(b)
+		var id string
+		err = row.Scan(&id)
+		if err != nil {
+			log.Printf("Unable to INSERT: %v\n", err)
+			log.Println(b)
+		}
+	} else {
+		fmt.Println("Book alredy excist: ", b)
 	}
 }
